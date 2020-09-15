@@ -1,13 +1,10 @@
 local helpers = require "spec.helpers"
 
 for _, strategy in helpers.each_strategy() do
-  local bp
-
-  describe("lua_ssl_trusted_cert with single entry #" .. strategy, function()
-    lazy_setup(function()
-      bp = helpers.get_db_utils(strategy, {
+  describe("lua_ssl_trusted_cert with single entry #[" .. strategy .. "]", function()
+    before_each(function()
+      local bp = helpers.get_db_utils(strategy, {
         "routes",
-        "services",
         "plugins",
       })
 
@@ -39,15 +36,16 @@ for _, strategy in helpers.each_strategy() do
       })
     end)
 
+    after_each(function()
+      assert(helpers.stop_kong())
+    end)
+
     it("works with single entry", function()
       assert(helpers.start_kong({
         database   = strategy,
         nginx_conf = "spec/fixtures/custom_nginx.template",
         lua_ssl_trusted_certificate = "spec/fixtures/kong_spec.crt",
       }))
-      finally(function()
-        assert(helpers.stop_kong())
-      end)
 
       local proxy_client = helpers.proxy_client()
 
@@ -65,9 +63,6 @@ for _, strategy in helpers.each_strategy() do
         ssl_cert = "spec/fixtures/kong_clustering.crt",
         ssl_cert_key = "spec/fixtures/kong_clustering.key",
       }))
-      finally(function()
-        assert(helpers.stop_kong())
-      end)
 
       local proxy_client = helpers.proxy_client()
 

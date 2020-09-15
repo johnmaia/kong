@@ -104,25 +104,14 @@ local function gen_default_ssl_cert(kong_config, target)
 end
 
 
-local function gen_trusted_certs_file(kong_config)
-  -- create SSL folder
-  local ssl_path = pl_path.join(kong_config.prefix, "ssl")
-  local ok, err = pl_dir.makepath(ssl_path)
-  if not ok then
-    return nil, err
-  end
-
-  local certs_path = pl_path.join(ssl_path, "certs.pem")
+local function gen_trusted_certs_file(prefix, lua_ssl_trusted_certificate)
+  local certs_path = pl_path.join(prefix, ".ca_bundle")
   log.verbose("generating trusted certs file in ", certs_path)
 
-  local fd = assert(io.open(certs_path, "w+b"))
+  local fd = assert(io.open(certs_path, "w"))
 
-  for _,path in pairs(kong_config.lua_ssl_trusted_certificate) do
-    local f = assert(io.open(path, "r"))
-    local str = assert(f:read("*a"))
-    f:close()
-
-    fd:write(str)
+  for _, path in ipairs(lua_ssl_trusted_certificate) do
+    fd:write(pl_file.read(path))
   end
 
   io.close(fd)
@@ -199,12 +188,9 @@ local function compile_conf(kong_config, conf_template)
     if #kong_config.lua_ssl_trusted_certificate == 0 then
       kong_config.lua_ssl_trusted_certificate = nil
 
-    else
-      local filepath, err = gen_trusted_certs_file(kong_config)
-      if not filepath then
-        return nil, err
-      end
-      kong_config.lua_ssl_trusted_certificate = filepath
+    elseif #kong_config.lua_ssl_trusted_certificate == 1 then
+      kong_config.lua_ssl_trusted_certificate = kong_config.lua_ssl_trusted_certificate[1]
+    -- else leave it as a table, will be treated in prepare_prefix
     end
   end
 
@@ -342,6 +328,17 @@ local function prepare_prefix(kong_config, nginx_custom_template_path)
     end
     kong_config.status_ssl_cert = kong_config.status_ssl_cert_default
     kong_config.status_ssl_cert_key = kong_config.status_ssl_cert_key_default
+  end
+
+  if type(kong_config.lua_ssl_trusted_certificate) == "table"
+  and #kong_config.lua_ssl_trusted_certificate > 0
+  then
+    local filepath, err = gen_trusted_certs_file(kong_config.prefix,
+                                                 kong_config.lua_ssl_trusted_certificate)
+    if not filepath then
+      return nil, err
+    end
+    kong_config.lua_ssl_trusted_certificate = filepath
   end
 
   -- check ulimit

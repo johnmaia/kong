@@ -802,12 +802,30 @@ local function check_and_infer(conf, opts)
   end
 
   if conf.lua_ssl_trusted_certificate then
-    for _,path in ipairs(conf.lua_ssl_trusted_certificate) do
+    local new_paths = {}
+
+    for i, path in ipairs(conf.lua_ssl_trusted_certificate) do
+      if path == "system" then
+        local new_path, err = utils.get_system_trusted_certs_filepath()
+        if new_path then
+          path = new_path
+
+        else
+          errors[#errors + 1] =
+            "unable to locate system bundle for lua_ssl_trusted_certificate \"system\" option: " ..
+            err
+        end
+      end
+
       if not pl_path.exists(path) then
         errors[#errors + 1] = "lua_ssl_trusted_certificate: no such file at " ..
                                path
       end
+
+      new_paths[i] = pl_path.abspath(path)
     end
+
+    conf.lua_ssl_trusted_certificate = new_paths
   end
 
   if conf.ssl_cipher_suite ~= "custom" then
@@ -1509,14 +1527,6 @@ local function load(path, custom_conf, opts)
   if conf.admin_ssl_cert and conf.admin_ssl_cert_key then
     conf.admin_ssl_cert = pl_path.abspath(conf.admin_ssl_cert)
     conf.admin_ssl_cert_key = pl_path.abspath(conf.admin_ssl_cert_key)
-  end
-
-  if conf.lua_ssl_trusted_certificate then
-    local abs_paths = {}
-    for i, path in ipairs(conf.lua_ssl_trusted_certificate) do
-      abs_paths[i] = pl_path.abspath(path)
-    end
-    conf.lua_ssl_trusted_certificate = abs_paths
   end
 
   if conf.cluster_cert and conf.cluster_cert_key then
